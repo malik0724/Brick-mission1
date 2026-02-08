@@ -1,195 +1,294 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>Brick Mission Stable</title>
-<style>
-html,body{
-  margin:0;
-  width:100%;
-  height:100%;
-  background:#000;
-  overflow:hidden;
-  touch-action:none;
-}
-canvas{display:block;}
-#ui{
-  position:fixed;top:0;left:0;width:100%;height:60px;
-  background:rgba(0,0,0,.85);
-  color:#0ff;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 12px;
-  box-sizing:border-box;
-  z-index:10;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Brick Mission Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; touch-action: none; }
+        body { background: #000; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+        
+        canvas { display: block; }
+
+        /* UI Overlays */
+        #gameUI {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 20, 40, 0.8);
+            border: 2px solid #00ffff;
+            border-radius: 15px;
+            padding: 10px 30px;
+            display: flex;
+            gap: 30px;
+            color: #00ffff;
+            font-weight: bold;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #powerLabel {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 20, 40, 0.8);
+            color: #00ffff;
+            padding: 5px 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            border: 1px solid #00ffff;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        #abilityBtn { background: linear-gradient(#ff3366, #ff0044); }
+        #menuBtn { background: linear-gradient(#00aaff, #0088ff); }
+
+        #startScreen {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+        }
+
+        .play-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: #00ffff;
+            color: #000;
+            border: none;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
 
-<div id="ui">
-  <div>LEVEL: <span id="lvl">1</span></div>
-  <div>BALLS: <span id="balls">20</span></div>
+<div id="startScreen">
+    <h1 style="color: #00ffff; font-size: 40px; text-shadow: 0 0 20px #00ffff;">BRICK MISSION PRO</h1>
+    <button class="play-btn" onclick="initGame()">START MISSION</button>
 </div>
 
-<canvas id="game"></canvas>
+<div id="gameUI">
+    <div>LEVEL: <span id="lvl">1</span></div>
+    <div>BALLS: <span id="bls">15</span></div>
+    <div>SCORE: <span id="scr">450</span></div>
+</div>
+
+<div id="powerLabel">POWER: 15%</div>
+
+<div class="controls">
+    <button class="btn" id="abilityBtn">⚡</button>
+    <button class="btn" id="menuBtn">☰</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let width, height;
+    let balls = [];
+    let bricks = [];
+    let isShooting = false;
+    let score = 450;
+    let mouse = { x: 0, y: 0, down: false };
 
-const W = window.innerWidth;
-const H = window.innerHeight;
-canvas.width = W;
-canvas.height = H;
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
 
-const floorY = H - 120;
+    window.addEventListener('resize', resize);
+    resize();
 
-let level=1;
-let totalBalls=20;
-let balls=[];
-let bricks=[];
-let aiming=false;
-let firing=false;
-let aimDX=0,aimDY=-1;
+    // --- Brick Setup ---
+    function createBricks() {
+        bricks = [];
+        const cols = 5;
+        const rows = 3;
+        const padding = 10;
+        const bWidth = (width - (padding * (cols + 1))) / cols;
+        const bHeight = 45;
+        const colors = ['#ff4747', '#a2d149', '#49d167', '#3498db', '#9b59b6'];
 
-function spawn(){
-  bricks=[];
-  balls=[];
-  firing=false;
-  let cols=7,pad=6;
-  let size=(W-pad*(cols+1))/cols;
+        for(let r = 0; r < rows; r++) {
+            for(let c = 0; c < cols; c++) {
+                if (r === 1 && (c === 0 || c === 2 || c === 3)) continue; // Match layout pattern
+                
+                let hp = Math.floor(Math.random() * 80) + 10;
+                bricks.push({
+                    x: padding + c * (bWidth + padding),
+                    y: 100 + r * (bHeight + padding),
+                    w: bWidth,
+                    h: bHeight,
+                    hp: hp,
+                    maxHp: hp,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+    }
 
-  for(let r=0;r<5;r++){
-    for(let c=0;c<cols;c++){
-      if(Math.random()>.35){
-        bricks.push({
-          x:pad+c*(size+pad),
-          y:80+r*(size+pad),
-          w:size,h:size,
-          hp:level+r
+    // --- Shooting Logic (Scatter Shot) ---
+    function fireBalls() {
+        if (balls.length > 0) return;
+
+        const startX = width / 2;
+        const startY = height - 80;
+        const ballCount = 15;
+        const spread = 0.3; // How wide the "line" of balls is
+        
+        const angle = Math.atan2(mouse.y - startY, mouse.x - startX);
+
+        for (let i = 0; i < ballCount; i++) {
+            // This offset creates the fanned-out line effect
+            const offset = (i - (ballCount - 1) / 2) * (spread / ballCount);
+            const finalAngle = angle + offset;
+            const speed = 10;
+
+            balls.push({
+                x: startX,
+                y: startY,
+                vx: Math.cos(finalAngle) * speed,
+                vy: Math.sin(finalAngle) * speed,
+                r: 6
+            });
+        }
+    }
+
+    // --- Drawing ---
+    function draw() {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw Bricks
+        bricks.forEach((b, index) => {
+            if (b.hp <= 0) return;
+            
+            // Main brick body
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+
+            // Health Text
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(b.hp, b.x + b.w/2, b.y + b.h/2 + 6);
+
+            // Health Bar (Green line at bottom)
+            const healthPerc = b.hp / b.maxHp;
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(b.x + 5, b.y + b.h - 8, (b.w - 10) * healthPerc, 4);
         });
-      }
+
+        // Draw Balls
+        ctx.fillStyle = '#fff';
+        balls.forEach((b, i) => {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+            ctx.fill();
+
+            // Move ball
+            b.x += b.vx;
+            b.y += b.vy;
+
+            // Wall Bounce
+            if (b.x < 0 || b.x > width) b.vx *= -1;
+            if (b.y < 0) b.vy *= -1;
+
+            // Brick Collision
+            bricks.forEach(br => {
+                if (br.hp > 0 && b.x > br.x && b.x < br.x + br.w && b.y > br.y && b.y < br.y + br.h) {
+                    b.vy *= -1;
+                    br.hp--;
+                    score += 10;
+                    document.getElementById('scr').innerText = score;
+                }
+            });
+        });
+
+        // Remove balls that fall off bottom
+        balls = balls.filter(b => b.y < height);
+
+        // Draw Shooter Base (The green circle and target)
+        const shooterX = width / 2;
+        const shooterY = height - 60;
+        
+        ctx.fillStyle = '#00e676';
+        ctx.beginPath();
+        ctx.arc(shooterX, shooterY, 45, 0, Math.PI*2);
+        ctx.fill();
+
+        // Target Reticle
+        if (!balls.length) {
+            const angle = Math.atan2(mouse.y - shooterY, mouse.x - shooterX);
+            const tx = shooterX + Math.cos(angle) * 35;
+            const ty = shooterY + Math.sin(angle) * 35;
+            
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(tx, ty, 10, 0, Math.PI*2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        requestAnimationFrame(draw);
     }
-  }
-}
-spawn();
 
-function updateAim(x,y){
-  let dx=x-W/2;
-  let dy=y-floorY;
-  if(dy>-30) dy=-30;
-  let len=Math.hypot(dx,dy);
-  aimDX=dx/len;
-  aimDY=dy/len;
-}
+    // --- Input Logic ---
+    window.addEventListener('mousemove', e => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
 
-window.addEventListener("touchstart",e=>{
-  if(firing) return;
-  aiming=true;
-  updateAim(e.touches[0].clientX,e.touches[0].clientY);
-},{passive:false});
+    window.addEventListener('mousedown', () => fireBalls());
 
-window.addEventListener("touchmove",e=>{
-  if(aiming){
-    updateAim(e.touches[0].clientX,e.touches[0].clientY);
-  }
-},{passive:false});
+    // Touch support
+    window.addEventListener('touchstart', e => {
+        mouse.x = e.touches[0].clientX;
+        mouse.y = e.touches[0].clientY;
+        fireBalls();
+    });
 
-window.addEventListener("touchend",()=>{
-  if(!aiming||firing) return;
-  aiming=false;
-  fire();
-});
-
-function fire(){
-  firing=true;
-  for(let i=0;i<totalBalls;i++){
-    setTimeout(()=>{
-      balls.push({
-        x:W/2,
-        y:floorY,
-        vx:aimDX*12,
-        vy:aimDY*12,
-        live:true
-      });
-    },i*60);
-  }
-}
-
-function update(){
-  for(let b of balls){
-    if(!b.live) continue;
-    b.x+=b.vx;
-    b.y+=b.vy;
-
-    if(b.x<5||b.x>W-5) b.vx*=-1;
-    if(b.y<60) b.vy*=-1;
-    if(b.y>floorY){ b.live=false; }
-
-    for(let br of bricks){
-      if(b.x>br.x && b.x<br.x+br.w &&
-         b.y>br.y && b.y<br.y+br.h){
-        b.vy*=-1;
-        br.hp--;
-      }
+    function initGame() {
+        document.getElementById('startScreen').style.display = 'none';
+        createBricks();
+        draw();
     }
-  }
-
-  bricks = bricks.filter(b=>b.hp>0);
-
-  if(firing && balls.length && balls.every(b=>!b.live)){
-    balls=[];
-    firing=false;
-    if(bricks.length===0){
-      level++;
-      document.getElementById("lvl").textContent=level;
-      spawn();
-    }
-  }
-}
-
-function draw(){
-  ctx.clearRect(0,0,W,H);
-
-  if(aiming && !firing){
-    ctx.setLineDash([6,12]);
-    ctx.strokeStyle="#0ff";
-    ctx.beginPath();
-    ctx.moveTo(W/2,floorY);
-    ctx.lineTo(W/2+aimDX*600,floorY+aimDY*600);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  for(let b of bricks){
-    ctx.fillStyle="#0ff";
-    ctx.fillRect(b.x,b.y,b.w,b.h);
-    ctx.fillStyle="#000";
-    ctx.font="bold 16px Arial";
-    ctx.textAlign="center";
-    ctx.fillText(b.hp,b.x+b.w/2,b.y+b.h/2+6);
-  }
-
-  ctx.fillStyle="#fff";
-  for(let b of balls){
-    if(b.live){
-      ctx.beginPath();
-      ctx.arc(b.x,b.y,4,0,Math.PI*2);
-      ctx.fill();
-    }
-  }
-}
-
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-loop();
 </script>
-
 </body>
 </html>
