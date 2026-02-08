@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Brick Mission – Ultimate</title>
+<style>
+body{margin:0;background:#000;overflow:hidden;font-family:Arial;color:#0ff;touch-action:none}
+canvas{display:block}
+#ui{position:absolute;top:0;width:100%;height:60px;background:rgba(0,0,0,.9);
+display:flex;justify-content:space-between;align-items:center;padding:0 12px;
+border-bottom:2px solid #0ff;z-index:10}
+.btn{background:#111;color:#0ff;border:1px solid #0ff;padding:6px 14px;
+border-radius:20px;box-shadow:0 0 10px #0ff;transition:.2s}
+.btn:active{transform:scale(.9)}
+#combo{position:absolute;top:70px;left:50%;transform:translateX(-50%);
+font-size:22px;color:#0f0;text-shadow:0 0 10px #0f0}
+.popup{position:absolute;inset:0;background:rgba(0,0,0,.95);
+display:flex;justify-content:center;align-items:center;flex-direction:column;z-index:50}
+.hidden{display:none}
+.shop{margin-top:20px}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div>LV <span id="lvl">1</span> | SCORE <span id="score">0</span></div>
+  <div>HS <span id="hs">0</span></div>
+  <div>
+    <button class="btn" onclick="togglePause()">⏯</button>
+    <button class="btn" onclick="toggleMusic()">🎵</button>
+    <button class="btn" onclick="openShop()">🛒</button>
+  </div>
+</div>
+<div id="combo">x1</div>
+
+<div id="start" class="popup">
+<h1>BRICK MISSION ULTIMATE</h1>
+<button class="btn" onclick="startGame()">START</button>
+</div>
+
+<div id="shop" class="popup hidden">
+<h2>SHOP</h2>
+<div class="shop">
+<button class="btn" onclick="buy('balls')">+5 Balls (100)</button>
+<button class="btn" onclick="buy('skin')">Change Skin (150)</button>
+</div>
+<button class="btn" onclick="closeShop()">CLOSE</button>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+const lvlEl=document.getElementById("lvl"),scoreEl=document.getElementById("score"),
+hsEl=document.getElementById("hs"),comboEl=document.getElementById("combo");
+const startUI=document.getElementById("start"),shopUI=document.getElementById("shop");
+
+let W,H,floorY,paused=false,started=false,firing=false;
+let balls=[],bricks=[],aiming=false,powerups=[],lasers=[];
+let aimDX=0,aimDY=-1;
+let level=1,totalBalls=20,combo=1,shake=0;
+let fireMode=false,slowMode=false,boss=null;
+let score=0,highScore=localStorage.getItem("bmhs")||0;
+let skin=0;
+hsEl.textContent=highScore;
+
+let music=new Audio("https://cdn.pixabay.com/download/audio/2022/10/18/audio_77a2c36df2.mp3?filename=arcade-music-loop-145857.mp3");
+music.loop=true;music.volume=.4;
+
+function toggleMusic(){music.paused?music.play():music.pause();}
+function resize(){W=c.width=innerWidth;H=c.height=innerHeight;floorY=H-100;}
+resize();onresize=resize;
+
+function startGame(){started=true;startUI.classList.add("hidden");spawn();}
+function togglePause(){paused=!paused;}
+function openShop(){shopUI.classList.remove("hidden");paused=true;}
+function closeShop(){shopUI.classList.add("hidden");paused=false;}
+
+function buy(type){
+if(type==="balls" && score>=100){score-=100;totalBalls+=5;}
+if(type==="skin" && score>=150){score-=150;skin=(skin+1)%3;}
+scoreEl.textContent=score;
+}
+
+function spawn(){
+balls=[];bricks=[];combo=1;comboEl.textContent="x1";
+fireMode=false;slowMode=false;powerups=[];lasers=[];boss=null;
+let cols=8,p=4,size=(W-(p*9))/8;
+for(let r=0;r<5;r++){
+ for(let x=0;x<cols;x++){
+  if(Math.random()>.4){
+   bricks.push({x:p+x*(size+p),y:80+r*(size+p),w:size,h:size,hp:level*2+r});
+}}}
+if(level%3===0){boss={x:W/2-80,y:80,w:160,h:40,hp:40};}
+lvlEl.textContent=level;
+}
+
+function updateAim(tx,ty){
+let dx=tx-W/2,dy=ty-floorY;
+if(dy>-50)dy=-50;
+let len=Math.hypot(dx,dy);
+aimDX=dx/len;aimDY=dy/len;
+}
+
+addEventListener("touchstart",e=>{
+if(!started||paused||firing)return;
+aiming=true;updateAim(e.touches[0].clientX,e.touches[0].clientY);
+});
+addEventListener("touchmove",e=>{if(aiming)updateAim(e.touches[0].clientX,e.touches[0].clientY);});
+addEventListener("touchend",()=>{if(!aiming||firing)return;aiming=false;fire();});
+
+function fire(){
+firing=true;
+for(let i=0;i<totalBalls;i++){
+setTimeout(()=>balls.push({
+x:W/2,y:floorY,
+vx:aimDX*(slowMode?6:12),
+vy:aimDY*(slowMode?6:12),
+live:true
+}),i*60);
+}
+}
+
+function update(){
+if(paused||!started)return;
+
+balls.forEach(b=>{
+if(!b.live)return;
+b.x+=b.vx;b.y+=b.vy;
+if(b.x<5||b.x>W-5)b.vx*=-1;
+if(b.y<60)b.vy*=-1;
+if(b.y>floorY){b.live=false;}
+
+bricks.forEach(br=>{
+if(b.x>br.x&&b.x<br.x+br.w&&b.y>br.y&&b.y<br.y+br.h){
+b.vy*=-1;br.hp--;combo++;score+=10;
+comboEl.textContent="x"+combo;
+}
+});
+});
+bricks=bricks.filter(b=>b.hp>0);
+
+if(firing&&balls.every(b=>!b.live)){
+balls=[];firing=false;
+if(bricks.length===0){level++;spawn();}
+}
+scoreEl.textContent=score;
+if(score>highScore){highScore=score;localStorage.setItem("bmhs",score);hsEl.textContent=score;}
+}
+
+function drawBrick(b){
+ctx.fillStyle=["#0ff","#f0f","#ff0"][skin];
+ctx.fillRect(b.x,b.y,b.w,b.h);
+}
+
+function draw(){
+ctx.clearRect(0,0,W,H);
+if(aiming&&!firing){
+ctx.setLineDash([6,12]);ctx.strokeStyle="#0ff";
+ctx.beginPath();ctx.moveTo(W/2,floorY);
+ctx.lineTo(W/2+aimDX*600,floorY+aimDY*600);
+ctx.stroke();ctx.setLineDash([]);
+}
+bricks.forEach(drawBrick);
+ctx.fillStyle="#fff";
+balls.forEach(b=>{if(b.live){ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.fill();}});
+update();requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
+
