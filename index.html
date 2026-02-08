@@ -1,27 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Brick Mission Stable</title>
+<style>
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  background:#000;
+  overflow:hidden;
+  touch-action:none;
+}
+canvas{display:block;}
+#ui{
+  position:fixed;top:0;left:0;width:100%;height:60px;
+  background:rgba(0,0,0,.85);
+  color:#0ff;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 12px;
+  box-sizing:border-box;
+  z-index:10;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div>LEVEL: <span id="lvl">1</span></div>
+  <div>BALLS: <span id="balls">20</span></div>
+</div>
+
+<canvas id="game"></canvas>
+
 <script>
-const canvas = document.getElementById("c");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-let W,H,floorY;
-let level=1,totalBalls=20;
-let balls=[],bricks=[];
-let aiming=false,firing=false;
+const W = window.innerWidth;
+const H = window.innerHeight;
+canvas.width = W;
+canvas.height = H;
+
+const floorY = H - 120;
+
+let level=1;
+let totalBalls=20;
+let balls=[];
+let bricks=[];
+let aiming=false;
+let firing=false;
 let aimDX=0,aimDY=-1;
 
-function resize(){
-  W = canvas.width = innerWidth;
-  H = canvas.height = innerHeight;
-  floorY = H - 120;
-}
-resize(); addEventListener("resize",resize);
-
 function spawn(){
-  bricks=[]; balls=[]; firing=false;
+  bricks=[];
+  balls=[];
+  firing=false;
   let cols=7,pad=6;
   let size=(W-pad*(cols+1))/cols;
+
   for(let r=0;r<5;r++){
     for(let c=0;c<cols;c++){
-      if(Math.random()>0.35){
+      if(Math.random()>.35){
         bricks.push({
           x:pad+c*(size+pad),
           y:80+r*(size+pad),
@@ -35,22 +78,28 @@ function spawn(){
 spawn();
 
 function updateAim(x,y){
-  let dx=x-W/2, dy=y-floorY;
-  if(dy>-20) dy=-20;
+  let dx=x-W/2;
+  let dy=y-floorY;
+  if(dy>-30) dy=-30;
   let len=Math.hypot(dx,dy);
-  aimDX=dx/len; aimDY=dy/len;
+  aimDX=dx/len;
+  aimDY=dy/len;
 }
 
-addEventListener("touchstart",e=>{
-  if(firing)return;
+window.addEventListener("touchstart",e=>{
+  if(firing) return;
   aiming=true;
   updateAim(e.touches[0].clientX,e.touches[0].clientY);
-});
-addEventListener("touchmove",e=>{
-  if(aiming) updateAim(e.touches[0].clientX,e.touches[0].clientY);
-});
-addEventListener("touchend",()=>{
-  if(!aiming||firing)return;
+},{passive:false});
+
+window.addEventListener("touchmove",e=>{
+  if(aiming){
+    updateAim(e.touches[0].clientX,e.touches[0].clientY);
+  }
+},{passive:false});
+
+window.addEventListener("touchend",()=>{
+  if(!aiming||firing) return;
   aiming=false;
   fire();
 });
@@ -60,7 +109,8 @@ function fire(){
   for(let i=0;i<totalBalls;i++){
     setTimeout(()=>{
       balls.push({
-        x:W/2,y:floorY,
+        x:W/2,
+        y:floorY,
         vx:aimDX*12,
         vy:aimDY*12,
         live:true
@@ -70,33 +120,41 @@ function fire(){
 }
 
 function update(){
-  balls.forEach(b=>{
-    if(!b.live)return;
-    b.x+=b.vx; b.y+=b.vy;
+  for(let b of balls){
+    if(!b.live) continue;
+    b.x+=b.vx;
+    b.y+=b.vy;
+
     if(b.x<5||b.x>W-5) b.vx*=-1;
     if(b.y<60) b.vy*=-1;
     if(b.y>floorY){ b.live=false; }
 
-    bricks.forEach(br=>{
-      if(b.x>br.x&&b.x<br.x+br.w&&b.y>br.y&&b.y<br.y+br.h){
+    for(let br of bricks){
+      if(b.x>br.x && b.x<br.x+br.w &&
+         b.y>br.y && b.y<br.y+br.h){
         b.vy*=-1;
         br.hp--;
       }
-    });
-  });
+    }
+  }
 
-  bricks=bricks.filter(b=>b.hp>0);
+  bricks = bricks.filter(b=>b.hp>0);
 
   if(firing && balls.length && balls.every(b=>!b.live)){
-    balls=[]; firing=false;
-    if(bricks.length===0){ level++; spawn(); }
+    balls=[];
+    firing=false;
+    if(bricks.length===0){
+      level++;
+      document.getElementById("lvl").textContent=level;
+      spawn();
+    }
   }
 }
 
 function draw(){
   ctx.clearRect(0,0,W,H);
 
-  if(aiming&&!firing){
+  if(aiming && !firing){
     ctx.setLineDash([6,12]);
     ctx.strokeStyle="#0ff";
     ctx.beginPath();
@@ -106,23 +164,23 @@ function draw(){
     ctx.setLineDash([]);
   }
 
-  bricks.forEach(b=>{
+  for(let b of bricks){
     ctx.fillStyle="#0ff";
     ctx.fillRect(b.x,b.y,b.w,b.h);
     ctx.fillStyle="#000";
     ctx.font="bold 16px Arial";
     ctx.textAlign="center";
     ctx.fillText(b.hp,b.x+b.w/2,b.y+b.h/2+6);
-  });
+  }
 
   ctx.fillStyle="#fff";
-  balls.forEach(b=>{
+  for(let b of balls){
     if(b.live){
       ctx.beginPath();
       ctx.arc(b.x,b.y,4,0,Math.PI*2);
       ctx.fill();
     }
-  });
+  }
 }
 
 function loop(){
@@ -132,3 +190,6 @@ function loop(){
 }
 loop();
 </script>
+
+</body>
+</html>
